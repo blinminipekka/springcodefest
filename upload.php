@@ -92,7 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES['music_file'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Upload Music</title>
-    <link rel="stylesheet" href="style1.css"> <!-- Link to your custom CSS -->
+    <link rel="stylesheet" href="style.css"> <!-- Link to your custom CSS -->
 </head>
 <body>
     <div class="container">
