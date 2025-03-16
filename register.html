@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - EchoBeat</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Create an Account</h1>
+        <form id="register-form" onsubmit="submitForm(event, 'register-form', 'register.php')">
+            <input type="text" name="username" placeholder="Username" required>
+            <input type="email" name="email" placeholder="Email" required>
+            <input type="password" name="password" placeholder="Password" required>
+            <button type="submit">Sign Up</button>
+        </form>
+        <p class="text-link">Already have an account? <a href="login.html">Log In</a></p>
+        <p id="error-message" class="error"></p>
+    </div>
+</body>
+</html>
+<script>
+    function submitForm(event, formId, phpFile) {
+        event.preventDefault();
+        let form = document.getElementById(formId);
+        let formData = new FormData(form);
+        fetch(phpFile, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            let errorElement = document.getElementById('error-message');
+            if (data.success) {
+                window.location.href = 'home1.php';
+            } else {
+                errorElement.textContent = data.error;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            let errorElement = document.getElementById('error-message');
+            errorElement.textContent = 'An error occurred. Please try again.';
+        });
+    }
+</script>
