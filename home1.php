@@ -1,26 +1,50 @@
 <?php
-session_start(); // Start the session to retrieve session data
+session_start(); // Start the session
 
 // Check if the user is logged in
-if (isset($_SESSION['username'])) {
-    $username = $_SESSION['username']; // Get the username from the session
-} else {
-    // If the session doesn't contain 'username', redirect to the login page
-    header('Location: login.html');
+if (!isset($_SESSION['username'])) {
+    header('Location: login.html'); // Redirect to login if not logged in
     exit();
 }
 
-// Define the user's music folder
-$userMusicFolder = 'uploads/' . $username;
+$username = $_SESSION['username'];
+$userId = $_SESSION['user_id']; // Get the user ID from the session
 
-// Ensure the folder exists
-if (!file_exists($userMusicFolder)) {
-    mkdir($userMusicFolder, 0777, true); // In case the folder doesn't exist
+// Database connection
+$conn = new mysqli("localhost", "root", "", "music_platform");
+
+if ($conn->connect_error) {
+    die("Database Connection Failed: " . $conn->connect_error);
 }
 
-// Get the music files in the user's folder
-$musicFiles = scandir($userMusicFolder);
-$musicFiles = array_diff($musicFiles, array('.', '..')); // Remove . and .. from the directory listing
+// Handle the deletion of music files
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['music_id'])) {
+    $musicId = $_POST['music_id'];
+
+    // Prepare SQL query to delete the music file
+    $stmt = $conn->prepare("DELETE FROM music_files WHERE id = ? AND user_id = ?");
+    $stmt->bind_param("ii", $musicId, $userId);
+    $stmt->execute();
+    $stmt->close();
+
+    // Reload the page after deletion
+    echo "<script>window.location.reload();</script>";
+    exit(); // Make sure the script stops executing after reload
+}
+
+// Retrieve music files from the database
+$stmt = $conn->prepare("SELECT id, song_title, file_name, file_path FROM music_files WHERE user_id = ?");
+$stmt->bind_param("i", $userId);
+$stmt->execute();
+$result = $stmt->get_result();
+
+$musicFiles = [];
+while ($row = $result->fetch_assoc()) {
+    $musicFiles[] = $row;
+}
+
+$stmt->close();
+$conn->close();
 ?>
 
 <!DOCTYPE html>
@@ -28,201 +52,173 @@ $musicFiles = array_diff($musicFiles, array('.', '..')); // Remove . and .. from
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Home - Welcome <?php echo $username; ?></title>
+    <title>Home - Welcome <?php echo htmlspecialchars($username); ?></title>
     <link rel="stylesheet" href="style.css">
     <style>
+        /* General Container Setup */
         .container {
-            padding-bottom: 100px; /* Space for the music player at the bottom */
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px;
+            text-align: center;
         }
 
+        /* Music Display */
         .music-boxes {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 20px;
+            align-items: center;
         }
 
         .box {
-            padding: 10px;
-            background: #f0f0f0;
+            width: 100%;
+            max-width: 600px;
+            padding: 20px;
             border: 1px solid #ddd;
-            border-radius: 5px;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+            text-align: center;
         }
 
+        /* Buttons */
+        .btn {
+            padding: 12px 20px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+            font-size: 16px;
+        }
+
+        .btn:hover {
+            background-color: #0056b3;
+        }
+
+        .delete-btn {
+            background-color: #dc3545;
+        }
+
+        .delete-btn:hover {
+            background-color: #c82333;
+        }
+
+        /* Fixed Music Player */
         .music-player-container {
             position: fixed;
             bottom: 0;
             left: 0;
             width: 100%;
-            background-color: #333;
-            color: white;
-            padding: 15px;
-            text-align: center;
-            z-index: 100; /* Keep it above other content */
-            box-shadow: 0 -4px 8px rgba(0, 0, 0, 0.2);
-        }
-
-        .music-player-container button {
-            margin: 5px;
-            padding: 8px 15px;
-            cursor: pointer;
-            background-color: #444;
-            border: none;
-            color: white;
-        }
-
-        .music-player-container button:hover {
-            background-color: #555;
-        }
-
-        /* Prevent the player from blocking content by giving it a height */
-        body {
-            margin: 0;
-            padding: 0;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-
-        main {
-            flex-grow: 1;
-            overflow-y: auto;
+            background-color: #fff;
+            box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1);
             padding: 20px;
+            z-index: 999;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
         }
+
+        @media (max-width: 768px) {
+            .music-player-container {
+                flex-direction: column;
+            }
+        }
+
     </style>
 </head>
 <body>
-    <main>
-        <div class="container">
-            <h1>Welcome, <?php echo $username; ?>!</h1>
-            <p>Here are your recent tracks and music uploads:</p>
+    <div class="container">
+        <h1>Welcome, <?php echo htmlspecialchars($username); ?>!</h1>
+        <p>Here are your recent tracks and music uploads:</p>
 
-            <!-- Music Boxes to Display User's Music -->
-            <div class="music-boxes">
-                <?php
-                // Check if the user has uploaded any music
-                if (empty($musicFiles)) {
-                    echo "<p>No music uploaded yet.</p>";
-                } else {
-                    // Loop through the files and display them
-                    foreach ($musicFiles as $file) {
-                        // Check if the file is a valid music file (MP3 or WAV)
-                        $fileExt = strtolower(pathinfo($file, PATHINFO_EXTENSION));
-                        if (in_array($fileExt, ['mp3', 'wav'])) {
-                            echo "<div class='box'>
-                                    <h3>" . basename($file) . "</h3>
-                                    <audio class='music-track' data-file='{$file}' controls>
-                                        <source src='{$userMusicFolder}/{$file}' type='audio/{$fileExt}' />
-                                        Your browser does not support the audio element.
-                                    </audio>
-                                  </div>";
-                        }
-                    }
-                }
-                ?>
+
+<div class="music-boxes" id="musicBoxes">
+    <?php if (empty($musicFiles)): ?>
+        <p>No music uploaded yet.</p>
+    <?php else: ?>
+        <?php foreach ($musicFiles as $musicFile): ?>
+            <div class="box" style="background-color: black;">
+                <h3 style="color: white;"><?php echo htmlspecialchars($musicFile['song_title']); ?></h3>
+                <audio controls>
+                    <source src="<?php echo htmlspecialchars($musicFile['file_path']); ?>" type="audio/mp3">
+                    Your browser does not support the audio element.
+                </audio>
+                <form action="home1.php" method="POST" style="display: inline-block;">
+                    <input type="hidden" name="music_id" value="<?php echo $musicFile['id']; ?>">
+                    <button type="submit" class="btn delete-btn">Delete</button>
+                </form>
             </div>
+        <?php endforeach; ?>
+    <?php endif; ?>
+</div>
 
-            <!-- Buttons -->
-            <button onclick="window.location.href='upload.php'">Upload New Music</button>
+        <button onclick="window.location.href='upload.php'" class="btn">Upload New Music</button>
+        <form action="logout.php" method="POST">
+            <button type="submit" class="btn">Logout</button>
+        </form>
+    </div>
 
-            <!-- Logout Button -->
-            <form action="logout.php" method="POST">
-                <button type="submit">Logout</button>
-            </form>
-        </div>
-    </main>
-
-    <!-- Music Player at the Bottom -->
-    <div class="music-player-container" id="musicPlayerContainer">
-        <div>
-            <span id="currentSong">No song playing</span>
-        </div>
+    <!-- Music Player -->
+    <div class="music-player-container">
+        <span id="currentSong">No song playing</span>
         <audio id="audioPlayer" controls>
             <source id="audioSource" src="" type="audio/mp3">
             Your browser does not support the audio element.
         </audio>
-        <br>
         <button id="shuffleButton">Shuffle</button>
         <button id="prevButton">Prev</button>
-        <button id="pauseButton">Pause</button>
+        <button id="playPauseButton">Play</button>
         <button id="nextButton">Next</button>
+        <button id="repeatButton">Repeat Off</button>
     </div>
 
     <script>
-        // Music player logic
-        const musicFiles = <?php echo json_encode(array_values(array_filter($musicFiles, function($file) { return in_array(strtolower(pathinfo($file, PATHINFO_EXTENSION)), ['mp3', 'wav']); }))); ?>;
+        const musicFiles = <?php echo json_encode(array_column($musicFiles, 'file_path')); ?>;
         const audioPlayer = document.getElementById("audioPlayer");
         const audioSource = document.getElementById("audioSource");
         const currentSongElement = document.getElementById("currentSong");
-        const musicPlayerContainer = document.getElementById("musicPlayerContainer");
-
+        const playPauseButton = document.getElementById("playPauseButton");
         let currentSongIndex = 0;
         let isShuffling = false;
+        let isRepeating = false;
 
-        // Show the player when a song is playing
-        function showPlayer() {
-            musicPlayerContainer.style.display = 'block';
-        }
-
-        // Update the audio player with the current song
         function loadSong(songIndex) {
             currentSongIndex = songIndex;
-            const song = musicFiles[songIndex];
-            audioSource.src = `uploads/<?php echo $username; ?>/${song}`;
-            currentSongElement.innerText = `Now Playing: ${song}`;
+            if (!musicFiles[songIndex]) return;
+            audioSource.src = musicFiles[songIndex];
+            currentSongElement.innerText = `Now Playing: ${musicFiles[songIndex]}`;
             audioPlayer.load();
             audioPlayer.play();
-            showPlayer();
+            playPauseButton.innerText = "Pause";
         }
 
-        // Shuffle the playlist
         function shuffleSongs() {
             isShuffling = !isShuffling;
-            if (isShuffling) {
-                musicFiles.sort(() => Math.random() - 0.5); // Shuffle array
-                document.getElementById("shuffleButton").innerText = "Shuffle On";
+            document.getElementById("shuffleButton").innerText = isShuffling ? "Shuffle On" : "Shuffle";
+        }
+
+        function toggleRepeat() {
+            isRepeating = !isRepeating;
+            audioPlayer.loop = isRepeating;
+            document.getElementById("repeatButton").innerText = isRepeating ? "Repeat On" : "Repeat Off";
+        }
+
+        document.getElementById("nextButton").onclick = () => loadSong((currentSongIndex + 1) % musicFiles.length);
+        document.getElementById("prevButton").onclick = () => loadSong((currentSongIndex - 1 + musicFiles.length) % musicFiles.length);
+        playPauseButton.onclick = () => {
+            if (audioPlayer.paused) {
+                audioPlayer.play();
+                playPauseButton.innerText = "Pause";
             } else {
-                musicFiles.sort(); // Reset to original order
-                document.getElementById("shuffleButton").innerText = "Shuffle";
+                audioPlayer.pause();
+                playPauseButton.innerText = "Play";
             }
-        }
+        };
 
-        // Play the next song in the playlist
-        function nextSong() {
-            if (isShuffling) {
-                loadSong(Math.floor(Math.random() * musicFiles.length));
-            } else {
-                currentSongIndex = (currentSongIndex + 1) % musicFiles.length;
-                loadSong(currentSongIndex);
-            }
-        }
-
-        // Play the previous song in the playlist
-        function prevSong() {
-            if (isShuffling) {
-                loadSong(Math.floor(Math.random() * musicFiles.length));
-            } else {
-                currentSongIndex = (currentSongIndex - 1 + musicFiles.length) % musicFiles.length;
-                loadSong(currentSongIndex);
-            }
-        }
-
-        // Pause the song
-        function pauseSong() {
-            audioPlayer.pause();
-        }
-
-        // Event Listeners
-        audioPlayer.addEventListener("ended", nextSong); // Play next song when current song ends
-
-        document.getElementById("shuffleButton").addEventListener("click", shuffleSongs);
-        document.getElementById("nextButton").addEventListener("click", nextSong);
-        document.getElementById("prevButton").addEventListener("click", prevSong);
-        document.getElementById("pauseButton").addEventListener("click", pauseSong);
-
-        // Load the first song on page load
-        if (musicFiles.length > 0) {
-            loadSong(0);
-        }
+        loadSong(currentSongIndex); // Initialize player with the first song
     </script>
 </body>
 </html>
